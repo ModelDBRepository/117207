@@ -1,0 +1,26 @@
+/* Plots stuff */
+objref ShapeGraph,VsomaGraph,VdendGraph,V_RVP
+ShapeGraph = new PlotShape(0)
+ShapeGraph.size(-276.639,350.111,-227.003,507.473)
+ShapeGraph.view(-276.639, -227.003, 626.75, 734.476, 4, 312, 278.1, 325.9)
+fast_flush_list.append(ShapeGraph)
+
+VsomaGraph = new Graph(0)
+VsomaGraph.size(0,15,-80,50)
+VsomaGraph.view(0, -80, 15, 130, 396, 9, 272.7, 200.8)
+graphList[0].append(VsomaGraph)
+VsomaGraph.exec_menu("Keep Lines")
+VsomaGraph.label(0.1, 0.95, "Somatic Membrane Potential, Function of Time (ms)", 2, 1, 0, 0, 1)
+
+VdendGraph = new Graph(0)
+VdendGraph.size(0,15,-80,50)
+VdendGraph.view(0, -80, 15, 130, 776, 9, 272.7, 200.8)
+graphList[0].append(VdendGraph)
+VdendGraph.exec_menu("Keep Lines")
+VdendGraph.label(0.1, 0.95, "Dendritic Membrane Potential, Function of Time (ms)", 2, 1, 0, 0, 1)
+
+V_RVP = new Graph(0)
+V_RVP.size(0,250,-75,40)
+V_RVP.view(0, -75, 250, 115, 396, 351, 555.3, 335.8)
+V_RVP.label(0.1, 0.95, "Membrane Potential of Basal Dendrites, Actual and Maximal, Function of Distance From Soma (um)", 2, 1, 0, 0, 1)
+flush_list.append(V_RVP)

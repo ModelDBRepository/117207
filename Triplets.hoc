@@ -1,0 +1,74 @@
+load_file("nrngui.hoc")
+load_file("Model/PFC_L5Pyramid_AckerAntic06.hoc")
+load_file(1,"Triplets.ses")
+
+celsius = 32
+print celsius
+dt = 0.01 // ms
+steps_per_ms=1/dt
+tstop = 45
+Nstep = tstop/dt+1
+v_init=-67.5
+
+/* Activate variable time step solver */
+cvode.active(1)
+cvode.rtol(1e-3)
+cvode.atol(1e-4)
+cvode.maxstep(1)
+
+xpanel("Run Simulations")
+xbutton("Run best fit model (Figure 8B)","RunBestFit()")
+xbutton("Run special case dendrite (Figure 10C)","RunSpecialCase()")
+xpanel(40,120)
+
+proc RunBestFit() {
+   distNaSD("basal[15]",150,0.5) // these are the best fit distributions
+   distKASD("basal[15]",150,0.7)
+   IClamp[2].del=21 // done at 125 Hz
+   IClamp[0].del=29 
+   run()
+}
+
+proc RunSpecialCase() {
+   distNaSD("basal[15]",375,0.5) // the special case distributions
+   distKASD("basal[15]",1200,0.7)
+   IClamp[2].del=18 // special case was done at 200 Hz, gives "smooth boosting"
+   IClamp[0].del=23 
+   run()
+}
+
+proc distNaSD() {local x,dist,gNalin
+  forsec $s1 for (x,0) {
+     dist=distance(x)
+     gNalin=$2-mNa*dist
+     if (gNalin>gNamax) {
+         gNalin=gNamax
+         print "Setting basal Na to maximum ",gNamax," at distance ",dist," in basal dendrite ",secname()
+     } else {
+         if (gNalin<0) {
+            gNalin=0
+            print "Setting basal Na to zero at distance ",dist," in basal dendrite ",secname()
+         }
+     }
+     gbar_na(x)=gNalin
+  }
+}
+
+proc distKASD() {local x, dist, gkalin, ratiolin, ratio  // distribute IA channels
+   forsec $s1 for (x,0) {
+      dist=distance(x)
+      gkalin=$2+mgka*dist // continuous with soma
+      ratiolin=1-mgkaratio*dist
+      if (ratiolin<0) {
+         ratio=0
+      } else ratio=ratiolin
+      if (gkalin>gkamax) {
+         gkabar_kap(x)=gkamax*ratio/1e4
+         gkabar_kad(x)=gkamax*(1-ratio)/1e4
+      } else {
+         gkabar_kap(x)=gkalin*ratio/10000
+         gkabar_kad(x)=gkalin*(1-ratio)/1e4
+      }
+   }
+}
+

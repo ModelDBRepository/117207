@@ -1,0 +1,277 @@
+/* NEURON code for simulating action potential backpropagation in basal dendrites
+   in control, TTX, and 4-AP conditions. From Acker, Antic (2008) Membrane Exitability
+   and Action Potential Backpropagation in Basal Dendrites of Prefrontal Cortical
+   Pyramidal Neurons. Run reproduces Fig. 6B.
+
+   Includes routines to run a series of values for the basal sodium conductance, 
+   accumulate waveform data in vectors, and save to a set of files with a parameter
+   value appended for offline analysis in MATLAB.
+
+   Corey Acker
+   Neuroscience
+   UConn Health Center
+
+   June 2006 */
+
+load_file("nrngui.hoc")
+load_file("Model/PFC_L5Pyramid_AckerAntic06.hoc")
+load_file(1,"AckerAnticBasalBackprop.ses")
+
+celsius = 32
+print celsius
+Dt = 0.05 // ms time step, for graphical output and output to files
+dt = Dt
+steps_per_ms=1/Dt
+tstop = 15-Dt/100
+Nstep = int(tstop/Dt)+1
+v_init=-66.5
+Istimamp=1.5
+HalfSomaDist=0 // half length of soma, use to reference distances to soma center
+ControlAPAvailableFlag=0
+
+/* Activate variable time step solver */
+cvode.active(1)
+cvode.rtol(1e-4)
+cvode.atol(1e-5)
+cvode.maxstep(1)
+
+/* Dendrite recording locations */
+// basal[8].v(1) ~150um from soma, but at tip of short dendrite
+// basal[22].v(0.59) ~150um from soma on longest dendrite
+
+/* Initialize variables to be used to store space plot results */
+objref xPeaks[Nbasaldends],PeaksCTR[Nbasaldends],PeaksTTX[Nbasaldends],Peaks4AP[Nbasaldends]
+for i=0,Nbasaldends-1 {
+   xPeaks[i]=new Vector() // clear vectors here because I might try to plot these before they're full
+   PeaksCTR[i]=new Vector()
+   PeaksTTX[i]=new Vector()
+   Peaks4AP[i]=new Vector()
+}
+
+/* Add current pulse stimulator to soma */
+objref Istim
+Istim = new IClamp(0.5)
+Istim.del = 3
+Istim.dur = 1.75
+Istim.amp = Istimamp
+
+/* Add voltage clamp to soma */
+objref Vstim
+Vstim = new SEClamp(0.5)
+Vstim.rs=0.01
+
+/* Record somatic and dendritic voltage waveforms */
+objref tvec,APsomaCTR,APsomaTTX,APsoma4AP, APdendCTR,APdendTTX,APdend4AP
+APsomaCTR = new Vector(Nstep,v_init) // Used to voltage clamp in TTX conditions
+APsomaTTX = new Vector(Nstep,v_init) // For optional plots that save properly
+APsoma4AP = new Vector(Nstep,v_init) // Also optional, as are the rest
+APdendCTR = new Vector(Nstep,v_init)
+APdendTTX = new Vector(Nstep,v_init)
+APdend4AP = new Vector(Nstep,v_init)
+tvec = new Vector(Nstep)
+tvec.indgen(Dt)
+
+/* Set up the range value plots of voltages */
+objref rvp_v[Nbasaldends], rvp_vpeak[Nbasaldends], record_sections, rvp_sections
+for i=0,Nbasaldends-1 rvp_v[i] = new RangeVarPlot("v")
+for i=0,Nbasaldends-1 rvp_vpeak[i] = new RangeVarPlot("vm_vmax")
+for i=0,Nbasaldends-1 rvp_v[i].begin(0.5) // begin at soma
+for i=0,Nbasaldends-1 rvp_vpeak[i].begin(0.5)
+for i=0,Nbasaldends-1 {
+   forsec record_dend[i] { rvp_v[i].end(1) // end at tip of dendrite of interest
+                           rvp_vpeak[i].end(1)
+   }
+}
+
+/* GUIs */
+xpanel("Best fit model")
+xlabel("Run basal dendritic single AP backpropagation")
+xlabel("in Control, simulated TTX, and 4-AP conditions (Fig. 6B)")
+xbutton("RUN","RunAll()")
+xbutton("Stop", "stoprun=1")
+xpanel(6,126)
+
+proc RunAll() {
+   print "Running control conditions"
+   RunControl()
+   if (!stoprun) {
+      print "Running TTX conditions"
+      RunTTX()
+   }
+   if (!stoprun) {
+      print "Running 4-AP conditions"
+      Run4AP()
+   }
+   if (stoprun) {
+      print "Stopped"
+   } else print "Finished!"
+}
+
+proc RunControl() {local isec
+   gna_control() // update basal dendrite sodium conductance
+   distKA()
+
+   Switch2Iclamp()
+
+   APdendCTR.record(&basal[22].v(0.59),tvec)
+   APsomaTTX.play_remove()
+   APsoma4AP.play_remove()
+   APdendTTX.play_remove()
+   APdend4AP.play_remove()
+
+   VsomaGraph.erase_all()
+   VsomaGraph.addexpr("Control","v(.5)", 1, 1, 0.17, 0.5, 2)
+   VsomaGraph.label(0.1, 0.95, "Somatic Membrane Potential, Function of Time (ms)", 2, 1, 0, 0, 1)
+   VdendGraph.erase_all()
+   VdendGraph.addexpr("Control","basal[22].v(0.59)", 1, 1, 0.17, 0.5, 2)
+   VdendGraph.label(0.1, 0.95, "Dendritic Membrane Potential, Function of Time (ms)", 2, 1, 0, 0, 1)
+   V_RVP.erase_all()
+   V_RVP.erase()
+   V_RVP.label(0.1, 0.95, "Membrane Potential of Basal Dendrites, Actual and Maximal, Function of Distance From Soma (um)", 2, 1, 0, 0, 1)
+   V_RVP.label(-1,0.5)
+
+   for i=0,Nbasaldends-1 V_RVP.addobject(rvp_v[i],1,1)
+   for i=0,Nbasaldends-1 V_RVP.addobject(rvp_vpeak[i],1,1)
+
+   run()
+
+   ControlAPAvailableFlag = 1 // Now you can do TTX using the recorded control somatic waveform
+
+   SavePeaksControl()
+   PlotPeaks()
+
+}
+
+proc RunTTX() {local isec
+   if (ControlAPAvailableFlag) {
+      forall gbar_na=0
+      Switch2Vclamp()
+      APsomaTTX.record(&v(0.5),tvec)
+      APdendTTX.record(&basal[22].v(0.59),tvec)
+      APsoma4AP.play_remove()
+      APdendCTR.play_remove()
+      APdend4AP.play_remove()
+
+      VsomaGraph.addexpr("TTX","v(.5)", 2, 1, 0.17, 0.5, 2)
+      VdendGraph.addexpr("TTX","basal[22].v(0.59)", 2, 1, 0.17, 0.5, 2)
+      V_RVP.erase_all()
+      V_RVP.erase()
+      V_RVP.label(0.1, 0.95, "Membrane Potential of Basal Dendrites, Actual and Maximal, Function of Distance From Soma (um)", 2, 1, 0, 0, 1)
+      V_RVP.label(-1,0.5)
+
+      for i=0,Nbasaldends-1 V_RVP.addobject(rvp_v[i],1,1)
+      for i=0,Nbasaldends-1 V_RVP.addobject(rvp_vpeak[i],2,1)
+
+      run()
+
+      SavePeaksTTX()
+      PlotPeaks()
+
+   } else print "Must run control conditions first!"
+}
+
+proc Run4AP() {local isec
+   BlockIA(0)
+   gna_control()
+
+   Switch2Iclamp()
+   APsoma4AP.record(&v(0.5),tvec)
+   APdend4AP.record(&basal[22].v(0.59),tvec)
+   APsomaCTR.play_remove()
+   APsomaTTX.play_remove()
+   APdendCTR.play_remove()
+   APdendTTX.play_remove()
+
+   VsomaGraph.addexpr("4-AP","v(.5)", 4, 1, 0.17, 0.5, 2)
+   VdendGraph.addexpr("4-AP","basal[22].v(0.59)", 4, 1, 0.17, 0.5, 2)
+   V_RVP.erase_all()
+   V_RVP.erase()
+   V_RVP.label(0.1, 0.95, "Membrane Potential of Basal Dendrites, Actual and Maximal, Function of Distance From Soma (um)", 2, 1, 0, 0, 1)
+   V_RVP.label(-1,0.5)
+
+   for i=0,Nbasaldends-1 V_RVP.addobject(rvp_v[i],1,1)
+   for i=0,Nbasaldends-1 V_RVP.addobject(rvp_vpeak[i],4,1)
+
+   run()
+
+   SavePeaks4AP()
+   PlotPeaks()
+
+}
+
+proc SavePeaksControl() {
+   /* Retrieve peak voltage and time data from rangevarplots */
+   for i=0,Nbasaldends-1 {
+      PeaksCTR[i]=new Vector() // clear vectors
+      xPeaks[i]=new Vector()
+
+      /* Retrieve peak voltages */
+      SaveRVP(xPeaks[i],PeaksCTR[i],rvp_vpeak[i])
+      xPeaks[i].sub(HalfSomaDist) // Distances from center of soma
+   }
+}
+
+proc SavePeaksTTX() {
+   /* Retrieve peak voltage and time data from rangevarplots */
+   for i=0,Nbasaldends-1 {
+      PeaksTTX[i]=new Vector() // clear vectors
+
+      /* Retrieve peak voltages */
+      SaveRVP(xPeaks[i],PeaksTTX[i],rvp_vpeak[i])
+   }
+}
+
+proc SavePeaks4AP() {
+   /* Retrieve peak voltage and time data from rangevarplots */
+   for i=0,Nbasaldends-1 {
+      Peaks4AP[i]=new Vector() // clear vectors
+
+      /* Retrieve peak voltages */
+      SaveRVP(xPeaks[i],Peaks4AP[i],rvp_vpeak[i])
+   }
+}
+
+proc PlotPeaks() {
+   V_RVP.erase_all()
+   V_RVP.label(0.1, 0.95, "Maximal Membrane Potential of Basal Dendrites, Function of Distance From Soma (um)", 2, 1, 0, 0, 1)
+   for i=0,Nbasaldends-1 {
+      PeaksCTR[i].plot(V_RVP,xPeaks[i],1,1)
+      PeaksTTX[i].plot(V_RVP,xPeaks[i],2,1)
+      Peaks4AP[i].plot(V_RVP,xPeaks[i],4,1)
+   }
+   if (PeaksCTR.size()) V_RVP.label(0.1, 0.5, "Peak Vm Control", 2, 1, 0, 0, 1)
+   if (PeaksTTX.size()) V_RVP.label(0.1, 0.47, "Peak Vm TTX", 2, 1, 0, 0, 2)
+   if (Peaks4AP.size()) V_RVP.label(0.1, 0.44, "Peak Vm 4-AP", 2, 1, 0, 0, 4)
+}
+
+proc Switch2Vclamp() {
+   Vstim.dur1=tstop // turn on vclamp
+   APsomaCTR.play_remove()
+   tvec.play_remove()
+   APsomaCTR.play(&Vstim.amp1,tvec,1)
+   Istim.amp=0 // turn off Iclamp
+}
+
+proc Switch2Iclamp() {
+   Vstim.dur1=0 // turn off vclamp
+   APsomaCTR.play_remove() 
+   APsomaCTR.record(&v(0.5),tvec)
+   Istim.amp=Istimamp //turn on Iclamp
+}
+
+proc BlockIA() {
+   block=$1
+   forall {
+      if (ismembrane("kap")) for (x,0) {
+         gkabar_kap(x)=gkabar_kap(x)*block
+      }
+      if (ismembrane("kad")) for (x,0) {
+         gkabar_kad(x)=gkabar_kad(x)*block
+      }
+   }
+}
+
+proc SaveRVP() { 
+   $o3.to_vector($o2,$o1) // x,y,rvp with v_peak
+}
+

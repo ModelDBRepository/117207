@@ -1,0 +1,74 @@
+{load_file("nrngui.hoc")}
+objectvar save_window_, rvp_
+objectvar scene_vector_[7]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+{pwman_place(0,0,0)}
+
+//Begin PointProcessManager
+{
+load_file("pointman.hoc")
+}
+{
+basal[34] ocbox_ = new PointProcessManager(0)
+}
+{object_push(ocbox_)}
+{
+mt.select("PlateauConductance") i = mt.selected()
+ms[i] = new MechanismStandard("PlateauConductance")
+ms[i].set("onset", 20, 0)
+ms[i].set("dur", 110, 0)
+ms[i].set("tau_on", 1, 0)
+ms[i].set("tau_off", 20, 0)
+ms[i].set("gmax", 0.01, 0)
+ms[i].set("e", 0, 0)
+mt.select("PlateauConductance") i = mt.selected() maction(i)
+hoc_ac_ = 0.611111
+sec.sec move() d1.flip_to(0)
+}
+{object_pop() doNotify()}
+{
+ocbox_ = ocbox_.v1
+ocbox_.map("PointProcessManager", 286, 444, 222.3, 384.3)
+}
+objref ocbox_
+//End PointProcessManager
+
+{
+save_window_ = new Graph(0)
+save_window_.size(0,200,-80,40)
+scene_vector_[3] = save_window_
+{save_window_.view(0, -80, 200, 120, 596, 51, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("basal[34].v(0.8)", 3, 1, 0.686228, 0.967231, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,200,-0.5,0.2)
+scene_vector_[4] = save_window_
+{save_window_.view(0, -0.5, 200, 0.7, 594, 392, 300.6, 123.4)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addexpr("PlateauConductance[0].i", 3, 1, 0.632335, 0.958877, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,200,-0.01,0.02)
+scene_vector_[5] = save_window_
+{save_window_.view(0, -0.01, 200, 0.03, 595, 630, 300.6, 122.5)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("PlateauConductance[0].g", 3, 1, 0.581437, 0.962749, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,200,-80,40)
+scene_vector_[6] = save_window_
+{save_window_.view(0, -80, 200, 120, 105, 109, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("soma[0].v(.5)", 1, 1, 0.752096, 0.940339, 2)
+}
+objectvar scene_vector_[1]
+{doNotify()}

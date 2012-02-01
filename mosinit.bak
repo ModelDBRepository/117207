@@ -1,0 +1,35 @@
+//moddir Model
+load_file("nrngui.hoc")
+
+objref nil, tobj
+strdef tstr
+
+xpanel("Figures for Acker and Antic, 2008")
+xradiobutton("fig 6B backpropagating APs Control, TTX, 4-AP", "restart(\"AckerAnticBasalBackprop\")")
+xradiobutton("fig 8B best fit triplets and fig 10 special case dendrite", "restart(\"Triplets\")")
+xradiobutton("fig 9A, 9B best fits with and without Na boosting, 10A, 10B with and without A-type and special case", "restart(\"LocalSpikes\")")
+xpanel(5,100)
+
+pwmcnt = PWManager[0].count // the initial gui should not be dismissed
+
+proc restart() {local i
+	objref graphItem, save_window_
+	for i=0, n_graph_lists-1 {
+//            print "graphList removal",i
+//		read(a)
+		graphList[i].remove_all()
+	}
+	flush_list.remove_all()
+	fast_flush_list.remove_all()
+	doNotify()
+//    ii=PWManager[0].count-1
+	for (i= PWManager[0].count-1; i >= pwmcnt-1; i -= 1) {
+//		print "PWManager[0].close(",ii,")"
+//		ii -= 1
+//		read(a)
+		PWManager[0].close(i)
+		doNotify()
+	}
+	sprint(tstr, "%s.hoc", $s1)
+	load_file(1, tstr)
+}

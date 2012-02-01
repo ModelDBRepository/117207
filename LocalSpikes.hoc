@@ -1,0 +1,111 @@
+load_file("nrngui.hoc")
+load_file("Model/PFC_L5Pyramid_AckerAntic06.hoc")
+load_file(1,"LocalSpikes.ses")
+load_file(1,"Tools.hoc")
+load_file(1,"LocalSpikes.ses")
+
+celsius = 32
+v_init=-67
+print celsius
+Dt = 0.1 // ms time step, for graphical output and output to files
+dt = Dt
+steps_per_ms=1/Dt
+tstop = 200+Dt/2
+Nstep = int(tstop/Dt)+1
+
+somaCa = 10
+distCa() // somatic calcium channel conductance was 10 instead of 8pS/um2 here, makes little difference
+
+strdef dendname
+dendname = "basal[34]"
+
+/* Activate variable time step solver */
+cvode.active(1)
+cvode.rtol(1e-4)
+cvode.atol(1e-5)
+cvode.maxstep(1)
+
+xpanel("Typical dendrite - Na boosting")
+xlabel("     Best fit model, without and with sodium boosting.     ")
+xbutton("Run best fit model (Figure 9A Control)","RunBestFit()")
+xbutton("Run best fit, Na boosted (Figure 9B)","RunBestFitNaBoosted()")
+xpanel(7,350)
+
+xpanel("Typical dendrite - A-type block")
+xlabel("     Best fit model, without and with block of A-type current.    ")
+xbutton("Run best fit model (Figure 10A Control)","RunBestFit()")
+xbutton("Run best fit, IA blocked (Figure 10A IA Blocked)","RunBestFitIABlocked()")
+xpanel(7,512)
+
+xpanel("Special case dendrite - A-type block")
+xlabel("     Special case dendrite, without and with block of A-type current.    ")
+xlabel("          Branch Strength Potentiation in a Model Basal Dendrite.    ")
+xbutton("Run special case dend (Figure 10B Control)","RunSpecial()")
+xbutton("Run special case, IA blocked (Figure 10B, IA Blocked)","RunSpecialIABlocked()")
+xpanel(7,675)
+
+proc RunBestFit() {
+   distNaSD(dendname,basalNa)
+   distKASD(dendname,somaKA)
+   run()
+}
+
+proc RunBestFitNaBoosted() {
+   distNaSD(dendname,375)
+   distKASD(dendname,somaKA)
+   run()
+}
+
+proc RunBestFitIABlocked() {
+   distNaSD(dendname,basalNa)
+   distKASD(dendname,0)
+   run()
+}
+
+proc RunSpecial() {
+   distNaSD(dendname,375)
+   distKASD(dendname,1200)
+   run()
+}
+
+proc RunSpecialIABlocked() {
+   distNaSD(dendname,375)
+   distKASD(dendname,0)
+   run()
+}
+
+proc distNaSD() {local x,dist,gNalin
+  forsec $s1 for (x,0) {
+     dist=distance(x)
+     gNalin=$2-mNa*dist
+     if (gNalin>gNamax) {
+         gNalin=gNamax
+         print "Setting basal Na to maximum ",gNamax," at distance ",dist," in basal dendrite ",secname()
+     } else {
+         if (gNalin<0) {
+            gNalin=0
+            print "Setting basal Na to zero at distance ",dist," in basal dendrite ",secname()
+         }
+     }
+     gbar_na(x)=gNalin
+  }
+}
+
+proc distKASD() {local x, dist, gkalin, ratiolin, ratio  // distribute IA channels
+   forsec $s1 for (x,0) {
+      dist=distance(x)
+      gkalin=$2+mgka*dist // continuous with soma
+      ratiolin=1-mgkaratio*dist
+      if (ratiolin<0) {
+         ratio=0
+      } else ratio=ratiolin
+      if (gkalin>gkamax) {
+         gkabar_kap(x)=gkamax*ratio/1e4
+         gkabar_kad(x)=gkamax*(1-ratio)/1e4
+      } else {
+         gkabar_kap(x)=gkalin*ratio/10000
+         gkabar_kad(x)=gkalin*(1-ratio)/1e4
+      }
+   }
+}
+

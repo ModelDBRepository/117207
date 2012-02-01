@@ -1,0 +1,278 @@
+/* Channel distributions and all other biophysical properties of model basal 
+   dendrites of prefrontal layer V pyramidal cell from Acker, Antic (2008) 
+   Membrane Exitability and Action Potential Backpropagation in Basal Dendrites 
+   of Prefrontal Cortical Pyramidal Neurons.
+
+   Corey Acker
+   Neuroscience
+   UConn Health Center
+
+   June 2006 */
+
+load_file("CA 229.hoc") // cell morphology
+
+// Cell passive properties
+global_Ra=90
+spineFACTOR = 1.5
+somaRm = 1000/0.04
+dendRm = somaRm/spineFACTOR
+somaCm = 1
+dendCm = somaCm*spineFACTOR
+spinedist = 50 // distance at which spines start
+Vk=-80
+VNa=60
+pasVm = -65
+
+// Specify cell biophysics
+somaNa = 900  // [pS/um2]
+axonNa = 5000
+basalNa = 150
+mNa = 0.5  // decrease in sodium channel conductance in basal dendrites [pS/um2/um]
+apicalNa = 375
+gNamax = 2000  // maximum basal sodium conductance
+vshiftna = -10
+
+somaKv = 40 // somatic, apical, and initial basal Kv conductance
+mKV = 0  // increase in KV conductance in basal dendrites
+gKVmax = 500  // maximum basal KV conductance
+axonKv = 100
+
+somaKA = 150  // initial basal total GKA conductance [pS/um2] equals somatic
+mgka = 0.7  // linear rise in IA channel density
+mgkaratio = 1/300  // linear drop in KAP portion, 1 at soma
+apicalKA = 300 // apical total GKA conductance
+gkamax = 2000  // pS/um2
+
+somaCa=10 // total calcium channel conductance density of soma [pS/um^2]
+dendCa=2 // dendritic total calcium conductance density
+cadist=30  // dendritic calcium channel conductance equals that of soma up until this distance
+gcaratio=0.2 // portion of gHVA to gHVA+gIT total, 1 is all HVA, 0 is all IT
+
+gkl=0.005
+ILdist=15
+
+proc biophys() {local x, dist
+
+  forall {
+    Ra = global_Ra
+    insert vmax
+  }
+
+  forsec "soma" {
+     cm = somaCm
+     insert pas g_pas = 1/somaRm e_pas = pasVm
+     insert na ena = VNa vshift_na=vshiftna
+     insert kv ek=Vk
+     insert kap
+     insert ca
+     insert it eca = 140 ion_style("ca_ion",0,1,0,0,0) vshift_ca = 10 boostca()
+     insert cad
+  }
+
+  forsec basals {
+     insert pas e_pas = pasVm
+     insert na ena = VNa vshift_na=vshiftna
+     insert kv ek=Vk
+     insert kap
+     insert kad
+     insert ca
+     insert it eca = 140 ion_style("ca_ion",0,1,0,0,0) vshift_ca = 10 boostca()
+     insert cad
+  }
+
+  forsec axon {
+    cm = somaCm
+    insert pas g_pas = 1/somaRm e_pas = pasVm
+    insert na ena = VNa vshift_na=vshiftna thi1_na = -58 thi2_na = -58
+    insert kv ek=Vk
+    insert kl
+    for (x,0) {
+       dist=distance(x)
+       if (dist>=ILdist) {
+          gbar_kl(x) = gkl
+       } else gbar_kl(x) = 0
+    }
+  }
+
+  forsec "apical" {
+     insert pas e_pas = pasVm
+     insert na ena = VNa vshift_na=vshiftna
+     insert kv ek=Vk
+     insert kap
+     insert kad
+     insert ca
+     insert it eca = 140 ion_style("ca_ion",0,1,0,0,0) vshift_ca = 10 boostca()
+     insert cad
+  }
+  
+  gna_control()
+  distCa()
+  distKV()
+  distKA()
+  distspines()
+}
+
+proc gna_control() {local x,dist,gNalin
+  forsec "soma" gbar_na = somaNa 
+
+  forsec basals for (x,0) {
+     dist=distance(x)
+     gNalin=basalNa-mNa*dist
+     if (gNalin>gNamax) {
+         gNalin=gNamax
+         print "Setting basal Na to maximum ",gNamax," at distance ",dist," in basal dendrite ",secname()
+     } else {
+         if (gNalin<0) {
+            gNalin=0
+            print "Setting basal Na to zero at distance ",dist," in basal dendrite ",secname()
+         }
+     }
+     gbar_na(x)=gNalin
+  }
+
+  forsec axon gbar_na = axonNa
+  forsec "apical" gbar_na = apicalNa
+}
+
+proc distKV() {local x,dist,gKVlin // distribute KV channels
+  forsec "soma" gbar_kv = somaKv 
+
+  forsec basals for (x,0) {
+     dist=distance(x)
+     gKVlin=somaKv+mKV*dist
+     if (gKVlin>gKVmax) {
+         gKVlin=gKVmax
+         print "Setting basal GKV to maximum ",gKVmax," at distance ",dist," in basal dendrite",secname()
+     } else {
+         if (gKVlin<0) {
+            gKVlin=0
+            print "Setting basal GKV to zero at distance ",dist," in basal dendrite ",secname()
+         }
+     }
+     gbar_kv(x)=gKVlin
+  }
+
+  forsec axon gbar_kv = axonKv 
+  forsec "apical" gbar_kv = somaKv 
+}
+
+proc distKA() {local x, dist, gkalin, ratiolin, ratio  // distribute IA channels
+   forsec "soma" gkabar_kap = somaKA/1e4
+
+   forsec basals for (x,0) {
+      dist=distance(x)
+      gkalin=somaKA+mgka*dist // continuous with soma
+      ratiolin=1-mgkaratio*dist
+      if (ratiolin<0) {
+         ratio=0
+      } else ratio=ratiolin
+      if (gkalin>gkamax) {
+         gkalin=gkamax
+         print "Setting GKA to maximum ",gkamax," in basal dendrite",secname()
+      } else {
+         if (gkalin<0) {
+             gkalin=0
+             print "Setting GKA to 0 in basal dendrite",secname()
+         }
+      gkabar_kap(x)=gkalin*ratio/10000
+      gkabar_kad(x)=gkalin*(1-ratio)/1e4
+      }
+   }
+
+   forsec "apical" for (x,0) {
+      dist=distance(x)
+      ratiolin=1-mgkaratio*dist
+      if (ratiolin<0) {
+         ratio=0
+      } else ratio=ratiolin
+      gkabar_kap(x)=apicalKA*ratio/1e4
+      gkabar_kad(x)=apicalKA*(1-ratio)/1e4
+   }
+}
+
+proc distCa() {local x, dist // distribute Ca channels
+   forsec "soma" {
+      gbar_ca = somaCa*gcaratio
+      gbar_it = somaCa*(1-gcaratio)/1e4
+   }
+
+   forsec basals for (x,0) {
+      dist=distance(x)
+      if (dist>cadist) {
+         gbar_ca(x) = dendCa*gcaratio
+         gbar_it(x) = dendCa*(1-gcaratio)/1e4
+      } else {
+         gbar_ca(x) = somaCa*gcaratio
+         gbar_it(x) = somaCa*(1-gcaratio)/1e4
+      }
+   }
+
+   forsec "apical" for (x,0) {
+      dist=distance(x)
+      if (dist>cadist) {
+         gbar_ca(x) = dendCa*gcaratio
+         gbar_it(x) = dendCa*(1-gcaratio)/1e4
+      } else {
+         gbar_ca(x) = somaCa*gcaratio
+         gbar_it(x) = somaCa*(1-gcaratio)/1e4
+      }
+   }
+}
+
+proc distspines() {local x, dist  // distribute spines on dendrites
+   forsec basals for (x,0) {
+      dist=distance(x)
+      if (dist>=spinedist) {
+         cm(x) = dendCm
+         g_pas(x) = 1/dendRm 
+      } else {
+         cm(x) = somaCm
+         g_pas(x) = 1/somaRm 
+      }
+   }
+
+   forsec "apical" for (x,0) {
+      dist=distance(x)
+      if (dist>=spinedist) {
+         cm(x) = dendCm
+         g_pas(x) = 1/dendRm 
+      } else {
+         cm(x) = somaCm
+         g_pas(x) = 1/somaRm 
+      }
+   }
+}
+
+proc boostca() {
+   vh1_it = 56
+   vh2_it = 415
+   ah_it = 30				
+   v12m_it = 45
+   v12h_it = 65  
+   am_it = 3
+   vshift_it = 10
+   vm1_it = 50
+   vm2_it = 125
+}
+
+biophys()
+
+/* Define which tips I'm interested in */
+Nbasaldends=13
+objref record_dend[Nbasaldends]
+for i=0,Nbasaldends-1 record_dend[i] = new SectionList()
+basal[4] record_dend[0].append() // tip of dendrite of interest
+basal[7] record_dend[1].append() // tip of dendrite of interest
+basal[8] record_dend[2].append() // tip of dendrite of interest
+basal[14] record_dend[3].append() // tip of dendrite of interest
+basal[15] record_dend[4].append() // tip of dendrite of interest
+basal[25] record_dend[5].append() // tip of dendrite of interest
+basal[10] record_dend[6].append() // tip of dendrite of interest
+basal[13] record_dend[7].append() // tip of dendrite of interest
+basal[24] record_dend[8].append() // tip of dendrite of interest
+basal[34] record_dend[9].append() // tip of dendrite of interest
+basal[22] record_dend[10].append() // tip of dendrite of interest
+basal[20] record_dend[11].append() // tip of dendrite of interest
+basal[31] record_dend[12].append() // tip of dendrite of interest
+
+
