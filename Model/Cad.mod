@@ -63,7 +63,7 @@ ASSIGNED {
 }
 	
 BREAKPOINT {
-	SOLVE state METHOD euler
+	SOLVE state METHOD derivimplicit
 }
 
 DERIVATIVE state { 
@@ -74,11 +74,3 @@ DERIVATIVE state {
 	ca' = (drive_channel/kb) + ((cainf-ca)/taur)
 	cai = ca
 }
-
-
-
-
-
-
-
-
